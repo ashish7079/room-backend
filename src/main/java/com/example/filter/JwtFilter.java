@@ -25,58 +25,56 @@ public class JwtFilter extends OncePerRequestFilter {
         this.userDetailsService = userDetailsService;
     }
 
-    @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                   HttpServletResponse response,
-                                   FilterChain filterChain)
-            throws ServletException, IOException {
+@Override
+protected void doFilterInternal(HttpServletRequest request,
+                               HttpServletResponse response,
+                               FilterChain filterChain)
+        throws ServletException, IOException {
 
-    	
-    	  String path = request.getServletPath();
+    String path = request.getServletPath();
 
-    	    // 🔥 IMPORTANT FIX
-    	    if (path.startsWith("/images/")) {
-    	        filterChain.doFilter(request, response);
-    	        return;
-    	    }
-    	
-        String authHeader = request.getHeader("Authorization");
-        String userName = null;
-        String token = null;
-
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token = authHeader.substring(7);
-
-            try {
-                userName = utils.ExtractUserName(token);
-            } catch (Exception e) {
-                filterChain.doFilter(request, response);
-                return;
-            }
-        }
-
-        if (userName != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-            UserDetails userDetails = userDetailsService.loadUserByUsername(userName);
-
-            System.out.println("TOKEN: " + token);
-            System.out.println("USERNAME: " + userName);
-            System.out.println("Authorities: " + userDetails.getAuthorities());
-            
-            if (utils.validateToken(userDetails.getUsername(), token)) {
-
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null,
-                                userDetails.getAuthorities()
-                        );
-
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-            }
-        }
+    // 🔥 PUBLIC APIs skip
+    if (path.startsWith("/auth") ||
+        path.startsWith("/images") ||
+        path.equals("/rooms")) {
 
         filterChain.doFilter(request, response);
+        return;
     }
+
+    String authHeader = request.getHeader("Authorization");
+    String userName = null;
+    String token = null;
+
+    if (authHeader != null && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+
+        try {
+            userName = utils.ExtractUserName(token);
+        } catch (Exception e) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            return;
+        }
+    }
+
+    if (userName != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+
+        UserDetails userDetails = userDetailsService.loadUserByUsername(userName);
+
+        if (utils.validateToken(userDetails.getUsername(), token)) {
+
+            UsernamePasswordAuthenticationToken authToken =
+                    new UsernamePasswordAuthenticationToken(
+                            userDetails,
+                            null,
+                            userDetails.getAuthorities()
+                    );
+
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+        }
+    }
+
+    filterChain.doFilter(request, response);
+}
 }
